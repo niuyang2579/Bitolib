@@ -1,4 +1,4 @@
-#ifdef HTTP_PARSER_H
+#ifndef HTTP_PARSER_H
 #define HTTP_PARSER_H
 
 #include "httprequest.h"
