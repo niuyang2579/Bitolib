@@ -1,41 +1,35 @@
-#include "looperthread.h"
+#include "threadpool.h"
 #include "looper.h"
+#include "looperthread.h"
 
-LooperThread::LooperThread():
-	loop_(nullptr),
-	// 初始化后线程便开始运行
-	thread_(std::bind(&LooperThread::ThreadFunc, this)),
-	mutex_(),
-	condition_()
+
+ThreadPool::ThreadPool(Looper* base_loop, int thread_num):
+	base_loop_(base_loop),
+	thread_num_(thread_num),
+	next_(0)
 {}
 
-LooperThread::~LooperThread()
+ThreadPool::~ThreadPool() {}
+
+// 启动线程池，即创建相应数量的线程放入池中
+void Thread::Start()
 {
-	loop_->Quit();
-	thread_.join();
+	for(int i=0; i<thread_num_; ++i)
+	{
+		std::unique_ptr<LooperThread> t(new LooperThread());
+		loopers_.push_back(t->GetLoop());
+		looper_threads_.push_back(std::move(t));
+	}
 }
 
-Looper* LooperThread::GetLoop()
+// 取出loop消费，简单的循环取用
+Looper* ThreadPool::TakeOutLoop()
 {
-	// 互斥锁与条件变量配合使用，当新线程运行起来后才能够得到loop的指针
+	Looper* loop = base_loop_;
+	if(!loopers_.empty())
 	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		while(loop_ == nullptr)
-		{
-			condition_.wait(lock);
-		}
+		loop = loopers_[next_];
+		next_ = (next_ + 1) % thread_num_;
 	}
-	return loop_;
-}
-
-void LooperThread::ThreadFunc()
-{
-	Looper loop;
-	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		loop_ = &loop;
-		// 得到了loop的指针，通知wait
-		condition_.notify_one();
-	}
-	loop.Start();
+	return loop;
 }
